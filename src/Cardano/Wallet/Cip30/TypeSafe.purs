@@ -62,6 +62,9 @@ import Cardano.Wallet.Cip30
   , submitTx
   ) as Cip30
 import Control.Alt ((<|>))
+import Control.Monad.Error.Class (liftMaybe)
+import Control.Monad.Except (throwError)
+import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
 import Data.Show.Generic (genericShow)
@@ -69,7 +72,7 @@ import Data.Variant (Variant, expand, inj)
 import Effect (Effect)
 import Effect.Aff (Aff, catchError)
 import Effect.Class (liftEffect)
-import Effect.Exception (Error, throw)
+import Effect.Exception (Error, error)
 import Prim.Row (class Union)
 import Type.Proxy (Proxy(Proxy))
 
@@ -133,6 +136,8 @@ type TxSignError =
   { code :: TxSignErrorTag
   , info :: String
   }
+
+type PaginateError = { maxSize :: Int }
 
 -- Implementations of CIP-30 functions
 
@@ -256,12 +261,22 @@ submitTx api tx = catchCode "submitTx" (Cip30.submitTx api tx) toSuccess
 
 -- Error matching machinery
 
--- | An `ErrorMatcher` is a function that tries to match a known error based on a tag code.
+-- | A known error is either a pagination error or an error with code and
+-- | message.
+-- | This type represents error info extracted at runtime, that is yet
+-- | uninterpreted.
+-- | `ErrorMatcher` can be used to dispatch on these values, taking the
+-- | current CIP-30 endpoint into account.
+type ErrorData = Either { maxSize :: Int } { code :: Int, info :: String }
+
+-- | An `ErrorMatcher` is a function that tries to match a known error with
+-- | an error `Variant` based on `ErrorData`.
 newtype ErrorMatcher (row :: Row Type) = ErrorMatcher
-  (Int -> String -> Maybe (Variant row))
+  (ErrorData -> Maybe (Variant row))
 
 -- | `ErrorMatcher`s can be joined: e.g `APIError` and `TxSignError` have
--- | non-intersecting error codes, so we can dispatch based on them
+-- | non-intersecting error codes, so we can build an `ErrorMatcher` dispatcher
+-- | that tries first and then the second.
 combineErrorMatchers
   :: forall row1 row2 row3
    . Union row1 row2 row3
@@ -270,15 +285,23 @@ combineErrorMatchers
   -> ErrorMatcher row2
   -> ErrorMatcher row3
 combineErrorMatchers (ErrorMatcher f1) (ErrorMatcher f2) =
-  ErrorMatcher \code info ->
-    expand <$> f1 code info <|> expand <$> f2 code info
+  ErrorMatcher \errorData ->
+    expand <$> f1 errorData <|> expand <$> f2 errorData
 
--- | Captures known error variants. Arguments:
+-- | Uses `ErrorMatcher` to transform a `purescript-cip30` function into a
+-- | function 'enriched' with error type variants. Arguments:
 -- |
 -- | - CIP-30 method name
 -- | - `Aff` action
 -- | - A function that injects successful result into the row
 -- | - `ErrorMatcher` that captures known errors
+-- |
+-- | It works like this:
+-- | - call the `Aff` action
+-- |   - If no exception, inject it into `success` variant.
+-- |   - if there is an exception, run the error matcher
+-- |     - If it is successful, return the "enriched" `(Variant row)`
+-- |     - If it fails, re-throw the error
 catchCode
   :: forall a errorRow row
    . Union errorRow (success :: a) row
@@ -288,72 +311,109 @@ catchCode
   -> (ErrorMatcher errorRow)
   -> Aff (Variant row)
 catchCode functionName action handleSuccess (ErrorMatcher handleException) = do
-  (action >>= handleSuccess >>> pure) `catchError` \error -> do
-    errorTagInt <- liftEffect $ _getErrorTagInt error
-    errorInfoString <- liftEffect $ _getErrorInfoString error
-    case expand <$> handleException errorTagInt errorInfoString of
-      Nothing -> do
-        liftEffect $ throw $
-          "CIP-30 " <> functionName
-            <> ": unable to match error code with specification, code: "
-            <> show errorTagInt
-            <> ", info: "
-            <> errorInfoString
-      Just res -> pure res
+  -- run the action
+  (action >>= handleSuccess >>> pure)
+    `catchError` \errorValue -> do
+      -- extract all needed information from the thrown value
+      mbErrorTagInt <- liftEffect $ _getErrorTagInt Nothing Just errorValue
+      mbErrorInfoString <- liftEffect $ _getErrorInfoString Nothing Just
+        errorValue
+      mbPaginateErrorMaxSize <- liftEffect $ _getPaginateError Nothing Just
+        errorValue
+      let
+        mbErrorData =
+          -- Figure out which type of ErrorData is this, if any
+          case mbErrorTagInt, mbErrorInfoString, mbPaginateErrorMaxSize of
+            -- error with error code and info message
+            Just errorTagInt, Just errorInfoString, _ ->
+              Just (Right { code: errorTagInt, info: errorInfoString })
+            -- pagination error
+            _, _, Just maxSize ->
+              Just (Left { maxSize })
+            -- unknown error we can't dispatch on
+            _, _, _ -> Nothing
+        -- will be thrown if we can't provide a recoverable error
+        myBad = error $ "CIP-30 " <> functionName
+          <> ": unable to match error with specification: "
+          <> show errorValue
+      exception <- liftMaybe myBad mbErrorData
+      -- run the matcher and see if it is able to recover the error
+      case expand <$> handleException exception of
+        Nothing -> liftEffect $ throwError myBad
+        Just res -> pure res
 
 toSuccess :: forall a rest. a -> Variant (success :: a | rest)
 toSuccess = (inj (Proxy :: Proxy "success"))
 
--- | Tries to get `error.code` number, re-throws if not a CIP-30 exception
-foreign import _getErrorTagInt :: Error -> Effect Int
+-- | Tries to get `error.code` number
+foreign import _getErrorTagInt
+  :: (forall a. Maybe a)
+  -> (forall a. a -> Maybe a)
+  -> Error
+  -> Effect (Maybe Int)
 
--- | Tries to get `error.code` number, re-throws if not a CIP-30 exception
-foreign import _getErrorInfoString :: Error -> Effect String
+-- | Tries to get `error.code` number
+foreign import _getErrorInfoString
+  :: (forall a. Maybe a)
+  -> (forall a. a -> Maybe a)
+  -> Error
+  -> Effect (Maybe String)
+
+-- | Tries to get `error.maxSize` number
+foreign import _getPaginateError
+  :: (forall a. Maybe a)
+  -> (forall a. a -> Maybe a)
+  -> Error
+  -> Effect (Maybe Int)
 
 -- Error matchers. They correspond to error types in CIP-30
 
 apiErrorMatcher :: ErrorMatcher (apiError :: APIError)
-apiErrorMatcher = ErrorMatcher $
+apiErrorMatcher = ErrorMatcher
   case _ of
-    (-1) -> match APIErrorInvalidRequest
-    (-2) -> match APIErrorInternalError
-    (-3) -> match APIErrorRefused
-    (-4) -> match APIErrorAccountChange
+    Left _ -> skip
+    Right { info, code: (-1) } -> match APIErrorInvalidRequest info
+    Right { info, code: (-2) } -> match APIErrorInternalError info
+    Right { info, code: (-3) } -> match APIErrorRefused info
+    Right { info, code: (-4) } -> match APIErrorAccountChange info
     _ -> skip
   where
-  match err info = Just $ (inj (Proxy :: Proxy "apiError")) { info, code: err }
-  skip _ = Nothing
+  match err info = Just $ inj (Proxy :: Proxy "apiError") { info, code: err }
+  skip = Nothing
 
 txSignErrorMatcher :: ErrorMatcher (txSignError :: TxSignError)
-txSignErrorMatcher = ErrorMatcher $
+txSignErrorMatcher = ErrorMatcher
   case _ of
-    1 -> match TxSignErrorProofGeneration
-    2 -> match TxSignErrorUserDeclined
+    Left _ -> skip
+    Right { info, code: 1 } -> match TxSignErrorProofGeneration info
+    Right { info, code: 2 } -> match TxSignErrorUserDeclined info
     _ -> skip
   where
-  match err info = Just $ (inj (Proxy :: Proxy "txSignError"))
+  match err info = Just $ inj (Proxy :: Proxy "txSignError")
     { info, code: err }
-  skip _ = Nothing
+  skip = Nothing
 
 dataSignErrorMatcher :: ErrorMatcher (dataSignError :: DataSignError)
-dataSignErrorMatcher = ErrorMatcher $
+dataSignErrorMatcher = ErrorMatcher
   case _ of
-    1 -> match DataSignErrorProofGeneration
-    2 -> match DataSignErrorAddressNotPK
-    3 -> match DataSignErrorUserDeclined
+    Left _ -> skip
+    Right { info, code: 1 } -> match DataSignErrorProofGeneration info
+    Right { info, code: 2 } -> match DataSignErrorAddressNotPK info
+    Right { info, code: 3 } -> match DataSignErrorUserDeclined info
     _ -> skip
   where
-  match err info = Just $ (inj (Proxy :: Proxy "dataSignError"))
+  match err info = Just $ inj (Proxy :: Proxy "dataSignError")
     { info, code: err }
-  skip _ = Nothing
+  skip = Nothing
 
 txSendErrorMatcher :: ErrorMatcher (txSendError :: TxSendError)
-txSendErrorMatcher = ErrorMatcher $
+txSendErrorMatcher = ErrorMatcher
   case _ of
-    1 -> match TxSendErrorRefused
-    2 -> match TxSendErrorFailure
+    Left _ -> skip
+    Right { info, code: 1 } -> match TxSendErrorRefused info
+    Right { info, code: 2 } -> match TxSendErrorFailure info
     _ -> skip
   where
-  match err info = Just $ (inj (Proxy :: Proxy "txSendError"))
+  match err info = Just $ inj (Proxy :: Proxy "txSendError")
     { info, code: err }
-  skip _ = Nothing
+  skip = Nothing

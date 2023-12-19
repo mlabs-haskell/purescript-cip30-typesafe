@@ -1,15 +1,20 @@
-export const _getErrorTagInt = err => () => {
+export const _getErrorTagInt = nothing => just => err => () => {
     if (typeof err === 'object' && typeof err.code === 'number') {
-        return err.code;
+        return just(err.code);
     }
-    console.warn('Unable to extract error code from CIP-30 error, unexpected format. Rethrowing');
-    throw err;
+    return nothing;
 };
 
-export const _getErrorInfoString = err => () => {
+export const _getErrorInfoString = nothing => just => err => () => {
     if (typeof err === 'object' && typeof err.info === 'string') {
-        return err.info;
+        return just(err.info);
     }
-    console.warn('Unable to extract error message from CIP-30 error, unexpected format. Rethrowing');
-    throw err;
+    return nothing;
+};
+
+export const _getPaginateError = nothing => just => err => () => {
+    if (typeof err === 'object' && typeof err.maxSize === 'number') {
+        return just(err.maxSize);
+    }
+    return nothing;
 };
