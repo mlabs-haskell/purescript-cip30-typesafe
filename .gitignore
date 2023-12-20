@@ -8,3 +8,5 @@
 /.purs*
 /.psa*
 /.spago
+/.spago2nix/
+result

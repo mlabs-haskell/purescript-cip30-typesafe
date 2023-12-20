@@ -1,3 +1,6 @@
+SHELL := bash
+.ONESHELL:
+.SHELLFLAGS := -eu -o pipefail -c
 .PHONY: build test format check-format
 
 ps-sources := $(shell fd --no-ignore-parent -epurs)
@@ -5,7 +8,8 @@ nix-sources := $(shell fd --no-ignore-parent -enix --exclude='spago*')
 js-sources := $(shell fd --no-ignore-parent -ejs -ecjs)
 
 build:
-	spago build
+	@spago build
+	@spago2nix generate
 
 test:
 	spago test
@@ -29,7 +33,6 @@ format:
 	@purs-tidy format-in-place ${ps-sources}
 	@nixpkgs-fmt ${nix-sources}
 	@prettier -w ${js-sources}
-	@doctoc CHANGELOG.md README.md --github --notitle
 	@make check-format
 
 # Run Nix CI locally
