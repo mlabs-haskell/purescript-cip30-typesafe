@@ -1,0 +1,6 @@
+{
+    "prettier": {
+        "arrowParens": "avoid",
+        "trailingComma": "none"
+    }
+}

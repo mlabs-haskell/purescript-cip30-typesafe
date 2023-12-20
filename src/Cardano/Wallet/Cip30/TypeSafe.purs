@@ -35,9 +35,9 @@ module Cardano.Wallet.Cip30.TypeSafe
 import Prelude
 
 import Cardano.Wallet.Cip30
-  ( Bytes
+  ( Api
+  , Bytes
   , Cbor
-  , Api
   , DataSignature
   , Extension
   , NetworkId
@@ -64,9 +64,9 @@ import Cardano.Wallet.Cip30
 import Control.Alt ((<|>))
 import Control.Monad.Error.Class (liftMaybe)
 import Control.Monad.Except (throwError)
-import Data.Either (Either(..))
+import Data.Either (Either(Left, Right))
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(Just, Nothing))
 import Data.Show.Generic (genericShow)
 import Data.Variant (Variant, expand, inj)
 import Effect (Effect)
