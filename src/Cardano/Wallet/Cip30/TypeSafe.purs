@@ -30,6 +30,12 @@ module Cardano.Wallet.Cip30.TypeSafe
   , signTx
   , signData
   , submitTx
+  , _apiError
+  , _txSignError
+  , _dataSignError
+  , _txSendError
+  , _paginateError
+  , _success
   ) where
 
 import Prelude
@@ -146,26 +152,27 @@ enable
   -> Array Cip30.Extension
   -> Aff (Variant (success :: Api, apiError :: APIError))
 enable wallet extensions = catchCode "enable" (Cip30.enable wallet extensions)
-  toSuccess
+  (inj _success)
   apiErrorMatcher
 
 isEnabled
   :: Cip30.WalletName
   -> Aff (Variant (success :: Boolean, apiError :: APIError))
-isEnabled wallet = catchCode "isEnabled" (Cip30.isEnabled wallet) toSuccess
+isEnabled wallet = catchCode "isEnabled" (Cip30.isEnabled wallet) (inj _success)
   apiErrorMatcher
 
 getExtensions
   :: Api
   -> Aff (Variant (apiError :: APIError, success :: Array Extension))
 getExtensions api = catchCode "getExtensions" (Cip30.getExtensions api)
-  toSuccess
+  (inj _success)
   apiErrorMatcher
 
 getNetworkId
   :: Api
   -> Aff (Variant (apiError :: APIError, success :: NetworkId))
-getNetworkId api = catchCode "getNetworkId" (Cip30.getNetworkId api) toSuccess
+getNetworkId api = catchCode "getNetworkId" (Cip30.getNetworkId api)
+  (inj _success)
   apiErrorMatcher
 
 getUtxos
@@ -179,7 +186,7 @@ getUtxos
            )
        )
 getUtxos api paginate = catchCode "getUtxos" (Cip30.getUtxos api paginate)
-  toSuccess
+  (inj _success)
   (apiErrorMatcher `combineErrorMatchers` paginateErrorMatcher)
 
 getCollateral
@@ -188,12 +195,12 @@ getCollateral
   -> Aff (Variant (success :: Maybe (Array Cbor), apiError :: APIError))
 getCollateral api cbor = catchCode "getCollateral"
   (Cip30.getCollateral api cbor)
-  toSuccess
+  (inj _success)
   apiErrorMatcher
 
 getBalance
   :: Api -> Aff (Variant (success :: Cbor, apiError :: APIError))
-getBalance api = catchCode "getBalance" (Cip30.getBalance api) toSuccess
+getBalance api = catchCode "getBalance" (Cip30.getBalance api) (inj _success)
   apiErrorMatcher
 
 getUsedAddresses
@@ -208,7 +215,7 @@ getUsedAddresses
        )
 getUsedAddresses api paginate = catchCode "getUsedAddresses"
   (Cip30.getUsedAddresses api paginate)
-  toSuccess
+  (inj _success)
   (apiErrorMatcher `combineErrorMatchers` paginateErrorMatcher)
 
 getUnusedAddresses
@@ -216,13 +223,13 @@ getUnusedAddresses
   -> Aff (Variant (success :: Array Cbor, apiError :: APIError))
 getUnusedAddresses api = catchCode "getUnusedAddresses"
   (Cip30.getUnusedAddresses api)
-  toSuccess
+  (inj _success)
   apiErrorMatcher
 
 getChangeAddress
   :: Api -> Aff (Variant (success :: Cbor, apiError :: APIError))
 getChangeAddress api = catchCode "getChangeAddress" (Cip30.getChangeAddress api)
-  toSuccess
+  (inj _success)
   apiErrorMatcher
 
 getRewardAddresses
@@ -230,7 +237,7 @@ getRewardAddresses
   -> Aff (Variant (success :: Array Cbor, apiError :: APIError))
 getRewardAddresses api = catchCode "getRewardAddresses"
   (Cip30.getRewardAddresses api)
-  toSuccess
+  (inj _success)
   apiErrorMatcher
 
 signTx
@@ -242,7 +249,7 @@ signTx
            (apiError :: APIError, txSignError :: TxSignError, success :: Cbor)
        )
 signTx api tx isPartialSign =
-  catchCode "signTx" (Cip30.signTx api tx isPartialSign) toSuccess
+  catchCode "signTx" (Cip30.signTx api tx isPartialSign) (inj _success)
     (apiErrorMatcher `combineErrorMatchers` txSignErrorMatcher)
 
 signData
@@ -258,7 +265,7 @@ signData
        )
 signData api addr payload = catchCode "signData"
   (Cip30.signData api addr payload)
-  toSuccess
+  (inj _success)
   (apiErrorMatcher `combineErrorMatchers` dataSignErrorMatcher)
 
 submitTx
@@ -268,7 +275,7 @@ submitTx
        ( Variant
            (success :: String, apiError :: APIError, txSendError :: TxSendError)
        )
-submitTx api tx = catchCode "submitTx" (Cip30.submitTx api tx) toSuccess
+submitTx api tx = catchCode "submitTx" (Cip30.submitTx api tx) (inj _success)
   (apiErrorMatcher `combineErrorMatchers` txSendErrorMatcher)
 
 -- Error matching machinery
@@ -354,9 +361,6 @@ catchCode functionName action handleSuccess (ErrorMatcher handleException) = do
         Nothing -> liftEffect $ throwError myBad
         Just res -> pure res
 
-toSuccess :: forall a rest. a -> Variant (success :: a | rest)
-toSuccess = (inj (Proxy :: Proxy "success"))
-
 -- | Tries to get `error.code` number
 foreign import _getErrorTagInt
   :: (forall a. Maybe a)
@@ -390,7 +394,7 @@ apiErrorMatcher = ErrorMatcher
     Right { info, code: (-4) } -> match APIErrorAccountChange info
     _ -> skip
   where
-  match err info = Just $ inj (Proxy :: Proxy "apiError") { info, code: err }
+  match err info = Just $ inj _apiError { info, code: err }
   skip = Nothing
 
 txSignErrorMatcher :: ErrorMatcher (txSignError :: TxSignError)
@@ -401,8 +405,7 @@ txSignErrorMatcher = ErrorMatcher
     Right { info, code: 2 } -> match TxSignErrorUserDeclined info
     _ -> skip
   where
-  match err info = Just $ inj (Proxy :: Proxy "txSignError")
-    { info, code: err }
+  match err info = Just $ inj _txSignError { info, code: err }
   skip = Nothing
 
 dataSignErrorMatcher :: ErrorMatcher (dataSignError :: DataSignError)
@@ -414,7 +417,7 @@ dataSignErrorMatcher = ErrorMatcher
     Right { info, code: 3 } -> match DataSignErrorUserDeclined info
     _ -> skip
   where
-  match err info = Just $ inj (Proxy :: Proxy "dataSignError")
+  match err info = Just $ inj _dataSignError
     { info, code: err }
   skip = Nothing
 
@@ -426,12 +429,31 @@ txSendErrorMatcher = ErrorMatcher
     Right { info, code: 2 } -> match TxSendErrorFailure info
     _ -> skip
   where
-  match err info = Just $ inj (Proxy :: Proxy "txSendError")
-    { info, code: err }
+  match err info = Just $ inj _txSendError { info, code: err }
   skip = Nothing
 
 paginateErrorMatcher :: ErrorMatcher (paginateError :: PaginateError)
 paginateErrorMatcher = ErrorMatcher
   case _ of
-    Left maxSize -> Just $ inj (Proxy :: Proxy "paginateError") maxSize
+    Left maxSize -> Just $ inj _paginateError maxSize
     _ -> Nothing
+
+-- Proxy values for convenient pattern matching via Variant
+
+_success :: Proxy "success"
+_success = Proxy
+
+_apiError :: Proxy "apiError"
+_apiError = Proxy
+
+_txSignError :: Proxy "txSignError"
+_txSignError = Proxy
+
+_dataSignError :: Proxy "dataSignError"
+_dataSignError = Proxy
+
+_txSendError :: Proxy "txSendError"
+_txSendError = Proxy
+
+_paginateError :: Proxy "paginateError"
+_paginateError = Proxy
