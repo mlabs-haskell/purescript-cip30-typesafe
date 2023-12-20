@@ -37,14 +37,14 @@ import Prelude
 import Cardano.Wallet.Cip30
   ( Bytes
   , Cbor
-  , Cip30Connection
-  , Cip30DataSignature
-  , Cip30Extension
+  , Api
+  , DataSignature
+  , Extension
   , NetworkId
   , Paginate
   )
 import Cardano.Wallet.Cip30
-  ( Cip30Extension
+  ( Extension
   , WalletName
   , enable
   , getBalance
@@ -143,8 +143,8 @@ type PaginateError = { maxSize :: Int }
 
 enable
   :: Cip30.WalletName
-  -> Array Cip30.Cip30Extension
-  -> Aff (Variant (success :: Cip30Connection, apiError :: APIError))
+  -> Array Cip30.Extension
+  -> Aff (Variant (success :: Api, apiError :: APIError))
 enable wallet extensions = catchCode "enable" (Cip30.enable wallet extensions)
   toSuccess
   apiErrorMatcher
@@ -156,20 +156,20 @@ isEnabled wallet = catchCode "isEnabled" (Cip30.isEnabled wallet) toSuccess
   apiErrorMatcher
 
 getExtensions
-  :: Cip30Connection
-  -> Aff (Variant (apiError :: APIError, success :: Array Cip30Extension))
+  :: Api
+  -> Aff (Variant (apiError :: APIError, success :: Array Extension))
 getExtensions api = catchCode "getExtensions" (Cip30.getExtensions api)
   toSuccess
   apiErrorMatcher
 
 getNetworkId
-  :: Cip30Connection
+  :: Api
   -> Aff (Variant (apiError :: APIError, success :: NetworkId))
 getNetworkId api = catchCode "getNetworkId" (Cip30.getNetworkId api) toSuccess
   apiErrorMatcher
 
 getUtxos
-  :: Cip30Connection
+  :: Api
   -> Maybe Paginate
   -> Aff (Variant (apiError :: APIError, success :: Maybe (Array Cbor)))
 getUtxos api paginate = catchCode "getUtxos" (Cip30.getUtxos api paginate)
@@ -177,7 +177,7 @@ getUtxos api paginate = catchCode "getUtxos" (Cip30.getUtxos api paginate)
   apiErrorMatcher
 
 getCollateral
-  :: Cip30Connection
+  :: Api
   -> Cbor
   -> Aff (Variant (success :: Maybe (Array Cbor), apiError :: APIError))
 getCollateral api cbor = catchCode "getCollateral"
@@ -186,12 +186,12 @@ getCollateral api cbor = catchCode "getCollateral"
   apiErrorMatcher
 
 getBalance
-  :: Cip30Connection -> Aff (Variant (success :: Cbor, apiError :: APIError))
+  :: Api -> Aff (Variant (success :: Cbor, apiError :: APIError))
 getBalance api = catchCode "getBalance" (Cip30.getBalance api) toSuccess
   apiErrorMatcher
 
 getUsedAddresses
-  :: Cip30Connection
+  :: Api
   -> Maybe Paginate
   -> Aff (Variant (success :: Array Cbor, apiError :: APIError))
 getUsedAddresses api paginate = catchCode "getUsedAddresses"
@@ -200,7 +200,7 @@ getUsedAddresses api paginate = catchCode "getUsedAddresses"
   apiErrorMatcher
 
 getUnusedAddresses
-  :: Cip30Connection
+  :: Api
   -> Aff (Variant (success :: Array Cbor, apiError :: APIError))
 getUnusedAddresses api = catchCode "getUnusedAddresses"
   (Cip30.getUnusedAddresses api)
@@ -208,21 +208,21 @@ getUnusedAddresses api = catchCode "getUnusedAddresses"
   apiErrorMatcher
 
 getChangeAddress
-  :: Cip30Connection -> Aff (Variant (success :: Cbor, apiError :: APIError))
+  :: Api -> Aff (Variant (success :: Cbor, apiError :: APIError))
 getChangeAddress api = catchCode "getChangeAddress" (Cip30.getChangeAddress api)
   toSuccess
   apiErrorMatcher
 
 getRewardAddresses
-  :: Cip30Connection
+  :: Api
   -> Aff (Variant (success :: Array Cbor, apiError :: APIError))
-getRewardAddresses api = catchCode "getRewardAddress"
+getRewardAddresses api = catchCode "getRewardAddresses"
   (Cip30.getRewardAddresses api)
   toSuccess
   apiErrorMatcher
 
 signTx
-  :: Cip30Connection
+  :: Api
   -> Cbor
   -> Boolean
   -> Aff
@@ -234,12 +234,12 @@ signTx api tx isPartialSign =
     (apiErrorMatcher `combineErrorMatchers` txSignErrorMatcher)
 
 signData
-  :: Cip30Connection
+  :: Api
   -> Cbor
   -> Bytes
   -> Aff
        ( Variant
-           ( success :: Cip30DataSignature
+           ( success :: DataSignature
            , dataSignError :: DataSignError
            , apiError :: APIError
            )
@@ -250,7 +250,7 @@ signData api addr payload = catchCode "signData"
   (apiErrorMatcher `combineErrorMatchers` dataSignErrorMatcher)
 
 submitTx
-  :: Cip30Connection
+  :: Api
   -> Cbor
   -> Aff
        ( Variant
