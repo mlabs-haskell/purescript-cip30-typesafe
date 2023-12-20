@@ -72,7 +72,7 @@ import Data.Variant (Variant, expand, inj)
 import Effect (Effect)
 import Effect.Aff (Aff, catchError)
 import Effect.Class (liftEffect)
-import Effect.Exception (Error, error)
+import Effect.Exception (Error, error, message)
 import Prim.Row (class Union)
 import Type.Proxy (Proxy(Proxy))
 
@@ -347,7 +347,7 @@ catchCode functionName action handleSuccess (ErrorMatcher handleException) = do
         -- will be thrown if we can't provide a recoverable error
         myBad = error $ "CIP-30 " <> functionName
           <> ": unable to match error with specification: "
-          <> show errorValue
+          <> message errorValue
       exception <- liftMaybe myBad mbErrorData
       -- run the matcher and see if it is able to recover the error
       case expand <$> handleException exception of
