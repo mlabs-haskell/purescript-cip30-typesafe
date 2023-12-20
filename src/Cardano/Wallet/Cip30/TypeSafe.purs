@@ -171,10 +171,16 @@ getNetworkId api = catchCode "getNetworkId" (Cip30.getNetworkId api) toSuccess
 getUtxos
   :: Api
   -> Maybe Paginate
-  -> Aff (Variant (apiError :: APIError, success :: Maybe (Array Cbor)))
+  -> Aff
+       ( Variant
+           ( apiError :: APIError
+           , paginateError :: PaginateError
+           , success :: Maybe (Array Cbor)
+           )
+       )
 getUtxos api paginate = catchCode "getUtxos" (Cip30.getUtxos api paginate)
   toSuccess
-  apiErrorMatcher
+  (apiErrorMatcher `combineErrorMatchers` paginateErrorMatcher)
 
 getCollateral
   :: Api
@@ -193,11 +199,17 @@ getBalance api = catchCode "getBalance" (Cip30.getBalance api) toSuccess
 getUsedAddresses
   :: Api
   -> Maybe Paginate
-  -> Aff (Variant (success :: Array Cbor, apiError :: APIError))
+  -> Aff
+       ( Variant
+           ( success :: Array Cbor
+           , paginateError :: PaginateError
+           , apiError :: APIError
+           )
+       )
 getUsedAddresses api paginate = catchCode "getUsedAddresses"
   (Cip30.getUsedAddresses api paginate)
   toSuccess
-  apiErrorMatcher
+  (apiErrorMatcher `combineErrorMatchers` paginateErrorMatcher)
 
 getUnusedAddresses
   :: Api
@@ -417,3 +429,9 @@ txSendErrorMatcher = ErrorMatcher
   match err info = Just $ inj (Proxy :: Proxy "txSendError")
     { info, code: err }
   skip = Nothing
+
+paginateErrorMatcher :: ErrorMatcher (paginateError :: PaginateError)
+paginateErrorMatcher = ErrorMatcher
+  case _ of
+    Left maxSize -> Just $ inj (Proxy :: Proxy "paginateError") maxSize
+    _ -> Nothing
