@@ -177,6 +177,7 @@ getNetworkId api = catchCode "getNetworkId" (Cip30.getNetworkId api)
 
 getUtxos
   :: Api
+  -> Maybe Cbor
   -> Maybe Paginate
   -> Aff
        ( Variant
@@ -185,7 +186,8 @@ getUtxos
            , success :: Maybe (Array Cbor)
            )
        )
-getUtxos api paginate = catchCode "getUtxos" (Cip30.getUtxos api paginate)
+getUtxos api amount paginate = catchCode "getUtxos"
+  (Cip30.getUtxos api amount paginate)
   (inj _success)
   (apiErrorMatcher `combineErrorMatchers` paginateErrorMatcher)
 

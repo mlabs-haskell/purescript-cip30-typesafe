@@ -138,7 +138,7 @@ main = do
               )
       describe "catching PaginateError" do
         it "catches PaginateError from getUtxos" do
-          (getUtxos (throwingApi { maxSize: 1 }) Nothing)
+          (getUtxos (throwingApi { maxSize: 1 }) Nothing Nothing)
             >>= shouldEqual
               ( inj (Proxy :: Proxy "paginateError")
                   { maxSize: 1 }

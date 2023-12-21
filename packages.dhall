@@ -105,19 +105,20 @@ let upstream =
 let additions =
       { cip30 =
         { dependencies =
-          [ "console"
-          , "effect"
-          , "prelude"
-          , "aff"
+          [ "aff"
           , "aff-promise"
           , "arrays"
-          , "maybe"
-          , "nullable"
+          , "console"
+          , "effect"
           , "literals"
+          , "maybe"
+          , "newtype"
+          , "nullable"
+          , "prelude"
           , "untagged-union"
           ]
         , repo = "https://github.com/mlabs-haskell/purescript-cip30"
-        , version = "9ef89252277782d983d411252af7589db9a94cc6"
+        , version = "1a28cef606de0f7eb2f46cd803a0305177c1e442"
         }
       }
 
