@@ -103,11 +103,11 @@ let
 
     "cip30" = pkgs.stdenv.mkDerivation {
         name = "cip30";
-        version = "9ef89252277782d983d411252af7589db9a94cc6";
+        version = "8f1b34b48825fcec5e9c67f33e255770b1e0bc45";
         src = pkgs.fetchgit {
           url = "https://github.com/mlabs-haskell/purescript-cip30";
-          rev = "9ef89252277782d983d411252af7589db9a94cc6";
-          sha256 = "10ip9bm98b6x91pgp9np16mlz1n3l3ylscb8kssfavg5a7bkypyb";
+          rev = "8f1b34b48825fcec5e9c67f33e255770b1e0bc45";
+          sha256 = "1rb7kv99rd50b6vhl90sirmzh43wgnyafpmn7w45n3d4nrvf1046";
         };
         phases = "installPhase";
         installPhase = "ln -s $src $out";
