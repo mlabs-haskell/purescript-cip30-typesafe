@@ -223,8 +223,8 @@
                 cd ${self}
                 purs-tidy check './src/**/*.purs' './test/**/*.purs'
                 nixpkgs-fmt --check "$(fd --no-ignore-parent -enix --exclude='spago*')"
-                prettier --log-level warn -c "$(fd --no-ignore-parent -ejs -ecjs)"
-                eslint --quiet "$(fd --no-ignore-parent -ejs -ecjs)" --parser-options 'sourceType: module'
+                prettier --log-level warn -c $(fd --no-ignore-parent -ejs -ecjs)
+                eslint --quiet $(fd --no-ignore-parent -ejs -ecjs) --parser-options 'sourceType: module'
                 touch $out
               '';
           };
