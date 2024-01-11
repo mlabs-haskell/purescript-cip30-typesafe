@@ -38,3 +38,4 @@ format:
 # Run Nix CI locally
 run-ci-actions:
 	nix build -L .#checks.x86_64-linux.formatting-check
+	nix build -L .#checks.x86_64-linux.tests
